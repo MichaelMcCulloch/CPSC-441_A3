@@ -1,0 +1,55 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Debug (Launch)-FastFtp<CPSC-441_A3>",
+            "request": "launch",
+            "mainClass": "FastFtp",
+            "projectName": "CPSC-441_A3",
+            "args": ""
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-Tester<CPSC-441_A3>",
+            "request": "launch",
+            "mainClass": "Tester",
+            "projectName": "CPSC-441_A3",
+            "args": ""
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-Segment<CPSC-441_A3>",
+            "request": "launch",
+            "mainClass": "cpsc441.a3.shared.Segment",
+            "projectName": "CPSC-441_A3",
+            "args": ""
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-TxQueue<CPSC-441_A3>",
+            "request": "launch",
+            "mainClass": "cpsc441.a3.shared.TxQueue",
+            "projectName": "CPSC-441_A3",
+            "args": ""
+        },
+        {
+            "type": "java",
+            "name": "Debug (Launch)-FastFtpServer<CPSC-441_A3>",
+            "request": "launch",
+            "mainClass": "cpsc441.a3.server.FastFtpServer",
+            "projectName": "CPSC-441_A3",
+            "args": ""
+        },
+        {
+            "type": "java",
+            "name": "Debug (Attach)",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 0
+        }
+    ]
+}
