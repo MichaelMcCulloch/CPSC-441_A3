@@ -10,7 +10,7 @@
             "request": "launch",
             "mainClass": "FastFtp",
             "projectName": "CPSC-441_A3",
-            "args": ""
+            "args": "localhost 2225 assign.pdf 5 5", 
         },
         {
             "type": "java",
