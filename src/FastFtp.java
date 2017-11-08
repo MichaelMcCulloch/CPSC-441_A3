@@ -14,6 +14,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -77,7 +78,11 @@ public class FastFtp {
 			fin.read(fileContent);
 
 			int chunk = Segment.MAX_PAYLOAD_SIZE;
-			
+			for (int i = 0; i < file.length() - chunk + 1; i += chunk){
+				byte[] payload = Arrays.copyOfRange(fileContent, i, i+chunk);
+				Segment segment = new Segment(i, payload);
+				sendQ.add(segment);
+			}
 			
 
 
