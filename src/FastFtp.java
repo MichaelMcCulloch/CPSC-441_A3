@@ -57,8 +57,8 @@ public class FastFtp {
 		try {
 			Path path = Paths.get(System.getProperty("user.dir"), fileName);
 			File file = path.toFile();
+
 			int localPort = 4321;
-		
 			InetAddress IPAddress = InetAddress.getByName(serverName);
 			tcp = new Socket(IPAddress, serverPort);	
 			udp = new DatagramSocket();
@@ -76,14 +76,25 @@ public class FastFtp {
 			byte[] fileContent = new byte[(int)file.length()];
 			FileInputStream fin = new FileInputStream(file);
 			fin.read(fileContent);
+			System.out.println(fileContent.length);
+			int numChunks =(int)fileContent.length / (int) Segment.MAX_PAYLOAD_SIZE;
+			int remainder =(int)fileContent.length % (int) Segment.MAX_PAYLOAD_SIZE;
 
-			int chunk = Segment.MAX_PAYLOAD_SIZE;
-			for (int i = 0; i < file.length() - chunk + 1; i += chunk){
-				byte[] payload = Arrays.copyOfRange(fileContent, i, i+chunk);
-				Segment segment = new Segment(i, payload);
+			int i = 0;
+			for (i = 0; i < numChunks + 1; i++){
+				int start = i * Segment.MAX_PAYLOAD_SIZE;
+				int end = start + Segment.MAX_PAYLOAD_SIZE;
+				int nextSeqNum = i * (Segment.MAX_SEGMENT_SIZE);
+				byte[] payload;
+				if (i < numChunks){
+					payload = Arrays.copyOfRange(fileContent, start, end);
+				} else {
+					payload = Arrays.copyOfRange(fileContent, start, start+remainder);
+				}
+				Segment segment = new Segment(nextSeqNum, payload);
 				sendQ.add(segment);
 			}
-			
+			System.out.println(sendQ);
 
 
 			
