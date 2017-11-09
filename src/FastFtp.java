@@ -32,7 +32,9 @@ public class FastFtp {
 	 * @throws IOException 	If the file is not found in the working directory.
 	 * @return 				The queue of segments which make up the file
 	 */
-	public Queue<Segment> segmentFile(String fileName, InetAddress ipAddress, int port) throws FileNotFoundException, IOException{
+	public Queue<Segment> segmentFile(String fileName) throws FileNotFoundException, IOException{
+		int maxSize = 32;
+		
 		Path path = Paths.get(System.getProperty("user.dir"), fileName);
 		File file = path.toFile();
 		Queue<Segment> sendQ = new LinkedList<>();
@@ -41,14 +43,14 @@ public class FastFtp {
 		FileInputStream fin = new FileInputStream(file);
 		fin.read(fileContent);
 		System.out.println(fileContent.length);
-		int numChunks =(int)fileContent.length / (int) Segment.MAX_PAYLOAD_SIZE;
-		int remainder =(int)fileContent.length % (int) Segment.MAX_PAYLOAD_SIZE;
+		int numChunks =(int)fileContent.length / maxSize;
+		int remainder =(int)fileContent.length % maxSize;
 
 		int i = 0;
 		for (i = 0; i < numChunks + 1; i++){
-			int start = i * Segment.MAX_PAYLOAD_SIZE;
-			int end = (i < numChunks) ? start + Segment.MAX_PAYLOAD_SIZE : start + remainder;
-			int nextSeqNum = i * (Segment.MAX_SEGMENT_SIZE);
+			int start = i * maxSize;
+			int end = (i < numChunks) ? start + maxSize : start + remainder;
+			int nextSeqNum = i * (maxSize + (Segment.MAX_SEGMENT_SIZE - Segment.MAX_PAYLOAD_SIZE));
 			byte[] payload;
 			payload = Arrays.copyOfRange(fileContent, start, end);
 
@@ -94,14 +96,24 @@ public class FastFtp {
 			os.writeInt(localPort);
 			os.flush();
 			int destinationPort = is.readInt();
-			Queue<Segment> sendQ = segmentFile(fileName, IPAddress, destinationPort);
-		
+			Queue<Segment> sendQ = segmentFile(fileName);
+
+			Thread t = new Thread(new ReceivingACK(null, udp));
+			t.start();
+
+			Segment s = sendQ.remove();
+			DatagramPacket pkt = new DatagramPacket(s.getBytes(), s.getBytes().length, IPAddress, destinationPort);
+			udp.send(pkt);
+			t.join();
+
 		} catch (FileNotFoundException e) {
 			System.err.println("File " + fileName + " not found. Exiting");
 		} catch (UnknownHostException e) {
 			System.err.println("Host " + serverName + " not found. Exiting");
 		} catch (IOException e){
 			System.err.println("Something went wrong. Exiting");
+		} catch (InterruptedException e) {
+			
 		}
 			
 
