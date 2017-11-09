@@ -15,14 +15,19 @@ public class ReceivingACK implements Runnable  {
         udp = sock;
     }
     
+    /**
+     * Something like this
+     */
     @Override
     public void run() {
+        byte[] response;
         while (true){
-            byte[] rec = new byte[1024];
-            DatagramPacket p = new DatagramPacket(rec, rec.length);
+            response = new byte[4];
+            DatagramPacket ackPkt = new DatagramPacket(response, 4);
             try {
-                udp.receive(p);
-                System.out.println("SOMETHING HAPPENED");
+                udp.receive(ackPkt);
+                Segment ack = new Segment(ackPkt);
+                System.out.println(ack.getSeqNum());
             } catch (Exception e) {}
         }
     }

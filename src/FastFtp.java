@@ -80,13 +80,15 @@ public class FastFtp {
 		Socket tcp;
 		DatagramSocket udp;
 		try {
+			//Get the file so we can record it's length
 			Path path = Paths.get(System.getProperty("user.dir"), fileName);
-			File file = path.toFile();
-
-			int localPort = 65525;
-			InetAddress IPAddress = InetAddress.getByName(serverName);
-			tcp = new Socket(IPAddress, serverPort);	
+			File file = path.toFile(); 
+			
+			//Get address of the remote and local port
+			InetAddress ipAddress = InetAddress.getByName(serverName);
+			tcp = new Socket(ipAddress, serverPort);	
 			udp = new DatagramSocket();
+			int localPort = udp.getLocalPort();
 
 			DataInputStream is = new DataInputStream(tcp.getInputStream());
 			DataOutputStream os = new DataOutputStream(tcp.getOutputStream());
@@ -97,14 +99,6 @@ public class FastFtp {
 			os.flush();
 			int destinationPort = is.readInt();
 			Queue<Segment> sendQ = segmentFile(fileName);
-
-			Thread t = new Thread(new ReceivingACK(null, udp));
-			t.start();
-
-			Segment s = sendQ.remove();
-			DatagramPacket pkt = new DatagramPacket(s.getBytes(), s.getBytes().length, IPAddress, destinationPort);
-			udp.send(pkt);
-			t.join();
 
 		} catch (FileNotFoundException e) {
 			System.err.println("File " + fileName + " not found. Exiting");
