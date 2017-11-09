@@ -50,7 +50,7 @@ public class FastFtp {
 		for (i = 0; i < numChunks + 1; i++){
 			int start = i * maxSize;
 			int end = (i < numChunks) ? start + maxSize : start + remainder;
-			int nextSeqNum = i * (maxSize + (Segment.MAX_SEGMENT_SIZE - Segment.MAX_PAYLOAD_SIZE));
+			int nextSeqNum = i;
 			byte[] payload;
 			payload = Arrays.copyOfRange(fileContent, start, end);
 
