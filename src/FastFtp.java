@@ -4,24 +4,16 @@
  *
  */
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.Queue;
+import java.io.*;
+import java.net.*;
+import java.nio.file.*;
+import java.util.*;
 
 import cpsc441.a3.shared.*;
 
 public class FastFtp {
 
+	TxQueue txQ;
 	/**
      * Constructor to initialize the program 
      * 
@@ -30,9 +22,42 @@ public class FastFtp {
      */
 	public FastFtp(int windowSize, int rtoTimer) {
 		// to be completed
+		txQ = new TxQueue(windowSize);
 	}
 
-	
+	/**
+	 * Preprocess the file into segments of maximum size
+	 * 
+	 * @param filename		Name of the file to be trasferred to the rmeote server.
+	 * @throws IOException 	If the file is not found in the working directory.
+	 * @return 				The queue of segments which make up the file
+	 */
+	public Queue<Segment> segmentFile(String fileName, InetAddress ipAddress, int port) throws FileNotFoundException, IOException{
+		Path path = Paths.get(System.getProperty("user.dir"), fileName);
+		File file = path.toFile();
+		Queue<Segment> sendQ = new LinkedList<>();
+		
+		byte[] fileContent = new byte[(int)file.length()];
+		FileInputStream fin = new FileInputStream(file);
+		fin.read(fileContent);
+		System.out.println(fileContent.length);
+		int numChunks =(int)fileContent.length / (int) Segment.MAX_PAYLOAD_SIZE;
+		int remainder =(int)fileContent.length % (int) Segment.MAX_PAYLOAD_SIZE;
+
+		int i = 0;
+		for (i = 0; i < numChunks + 1; i++){
+			int start = i * Segment.MAX_PAYLOAD_SIZE;
+			int end = (i < numChunks) ? start + Segment.MAX_PAYLOAD_SIZE : start + remainder;
+			int nextSeqNum = i * (Segment.MAX_SEGMENT_SIZE);
+			byte[] payload;
+			payload = Arrays.copyOfRange(fileContent, start, end);
+
+			Segment segment = new Segment(nextSeqNum, payload);
+			sendQ.add(segment);
+		}
+		fin.close();
+		return sendQ;
+	}
 
 
     /**
@@ -49,16 +74,14 @@ public class FastFtp {
      */
 	public void send(String serverName, int serverPort, String fileName) {
 		// to be completed
+		
 		Socket tcp;
 		DatagramSocket udp;
-		
-
-
 		try {
 			Path path = Paths.get(System.getProperty("user.dir"), fileName);
 			File file = path.toFile();
 
-			int localPort = 4321;
+			int localPort = 65525;
 			InetAddress IPAddress = InetAddress.getByName(serverName);
 			tcp = new Socket(IPAddress, serverPort);	
 			udp = new DatagramSocket();
@@ -69,40 +92,21 @@ public class FastFtp {
 			os.writeUTF(fileName);
 			os.writeLong(file.length());
 			os.writeInt(localPort);
+			os.flush();
 			int destinationPort = is.readInt();
-
-			Queue<Segment> sendQ = new LinkedList<>();
-
-			byte[] fileContent = new byte[(int)file.length()];
-			FileInputStream fin = new FileInputStream(file);
-			fin.read(fileContent);
-			System.out.println(fileContent.length);
-			int numChunks =(int)fileContent.length / (int) Segment.MAX_PAYLOAD_SIZE;
-			int remainder =(int)fileContent.length % (int) Segment.MAX_PAYLOAD_SIZE;
-
-			int i = 0;
-			for (i = 0; i < numChunks + 1; i++){
-				int start = i * Segment.MAX_PAYLOAD_SIZE;
-				int end = start + Segment.MAX_PAYLOAD_SIZE;
-				int nextSeqNum = i * (Segment.MAX_SEGMENT_SIZE);
-				byte[] payload;
-				if (i < numChunks){
-					payload = Arrays.copyOfRange(fileContent, start, end);
-				} else {
-					payload = Arrays.copyOfRange(fileContent, start, start+remainder);
-				}
-				Segment segment = new Segment(nextSeqNum, payload);
-				sendQ.add(segment);
-			}
-			System.out.println(sendQ);
-
+			Queue<Segment> sendQ = segmentFile(fileName, IPAddress, destinationPort);
+		
+		} catch (FileNotFoundException e) {
+			System.err.println("File " + fileName + " not found. Exiting");
+		} catch (UnknownHostException e) {
+			System.err.println("Host " + serverName + " not found. Exiting");
+		} catch (IOException e){
+			System.err.println("Something went wrong. Exiting");
+		}
+			
 
 			
-		} catch (Exception e) {
-			//TODO: handle exception
-		} finally {
-
-		}
+		
 
 		
 
@@ -124,6 +128,7 @@ public class FastFtp {
 		// send seg to the UDP socket
 		// add seg to the transmission queue
 		// if this is the first segment in transmission queue, start the timer
+		
 	}
 	public synchronized void processACK(Segment ack) {
 		// if ACK not in the current window, do nothing
