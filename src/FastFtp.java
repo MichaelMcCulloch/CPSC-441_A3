@@ -46,15 +46,6 @@ public class FastFtp {
 		
 
 	}
-
-	
-	TimerTask timerTask = new TimerTask(){
-		
-		@Override
-		public void run() {
-			processTimeout();
-		}
-	};
 	/**
 	 * Preprocess the file into segments of maximum size
 	 * 
@@ -63,7 +54,7 @@ public class FastFtp {
 	 * @return 				The queue of segments which make up the file
 	 */
 	public Queue<Segment> segmentFile(String fileName) throws FileNotFoundException, IOException{
-		int payloadSize = Segment.MAX_PAYLOAD_SIZE;
+		int payloadSize = 64;//Segment.MAX_PAYLOAD_SIZE;
 		
 		Path path = Paths.get(System.getProperty("user.dir"), fileName);
 		File file = path.toFile();
@@ -137,11 +128,8 @@ public class FastFtp {
 			ackReceiver.start();
 
 			while (!sendQ.isEmpty()){
-				boolean written = false;
-				while (isTxQFull(txQ)) {
-					if (!written) System.out.println("TxQ is Full, Waiting");
-					written = true;
-				}
+				
+				while (isTxQFull(txQ)) {}
 				Segment next = sendQ.remove();
 				processSend(next);
 			}
@@ -202,11 +190,22 @@ public class FastFtp {
 
 			int sizeAfter = txQ.size();
 
-			if (size != sizeAfter) { //Then ACK must have been in current window, already removed above
+			if (size != sizeAfter) {
+				schedFut.cancel(false);
+			} 
+			if (sizeAfter != 0){
 				schedFut.cancel(false);
 				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.MILLISECONDS);
-			}
+			}	
+
+/*	
+			if (size != sizeAfter)  //Then ACK must have been in current window, already removed above
+				schedFut.cancel(false);
 			
+
+			if (sizeAfter != 0) 
+				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.MILLISECONDS);
+*/			
 			// if ACK not in the current window, do nothing
 			// otherwise:
 			// TODO: TIMER CANCEL
@@ -231,7 +230,9 @@ public class FastFtp {
 				DatagramPacket pkt = new DatagramPacket(next.getBytes(), next.getBytes().length, ipAddress, destinationPort);
 				udp.send(pkt);
 				txQ.add(next);
+				System.out.println("RESEND:" + next.getSeqNum());
 			}
+			
 			// schedFut = scheduler.schedule(timeOutHandler, timeout, TimeUnit.MILLISECONDS);
 			// if there are any pending segments in transmission queue, TIMER START. lets just leave it running shall we?
 		} catch (Exception e) {
