@@ -10,7 +10,7 @@
             "request": "launch",
             "mainClass": "FastFtp",
             "projectName": "CPSC-441_A3",
-            "args": "localhost 2225 TestImage.png 5 2000"
+            "args": "localhost 2225 TestImage.png 5 3000"
         },
         {
             "type": "java",
