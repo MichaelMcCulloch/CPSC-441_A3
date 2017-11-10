@@ -8,12 +8,23 @@ import java.io.*;
 import java.net.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.*;
+
 
 import cpsc441.a3.shared.*;
 
 public class FastFtp {
 
-	TxQueue txQ;
+	private volatile TxQueue txQ;
+	private Socket tcp;
+	private DatagramSocket udp;
+	private InetAddress ipAddress;
+	private int destinationPort;
+	private ScheduledThreadPoolExecutor scheduler;
+	private Runnable timeOutHandler;
+	private ScheduledFuture<?> schedFut;
+
+	private int timeout;
 	/**
      * Constructor to initialize the program 
      * 
@@ -23,8 +34,27 @@ public class FastFtp {
 	public FastFtp(int windowSize, int rtoTimer) {
 		// to be completed
 		txQ = new TxQueue(windowSize);
+		timeout = rtoTimer;
+		timeOutHandler = new Runnable(){
+			@Override
+			public void run() {
+				processTimeout();
+			}
+		};
+		scheduler = new ScheduledThreadPoolExecutor(1);
+		scheduler.setRemoveOnCancelPolicy(true);
+		
+
 	}
 
+	
+	TimerTask timerTask = new TimerTask(){
+		
+		@Override
+		public void run() {
+			processTimeout();
+		}
+	};
 	/**
 	 * Preprocess the file into segments of maximum size
 	 * 
@@ -33,7 +63,7 @@ public class FastFtp {
 	 * @return 				The queue of segments which make up the file
 	 */
 	public Queue<Segment> segmentFile(String fileName) throws FileNotFoundException, IOException{
-		int maxSize = 32;
+		int payloadSize = Segment.MAX_PAYLOAD_SIZE;
 		
 		Path path = Paths.get(System.getProperty("user.dir"), fileName);
 		File file = path.toFile();
@@ -43,13 +73,13 @@ public class FastFtp {
 		FileInputStream fin = new FileInputStream(file);
 		fin.read(fileContent);
 		System.out.println(fileContent.length);
-		int numChunks =(int)fileContent.length / maxSize;
-		int remainder =(int)fileContent.length % maxSize;
+		int numChunks =(int)fileContent.length / payloadSize;
+		int remainder =(int)fileContent.length % payloadSize;
 
 		int i = 0;
 		for (i = 0; i < numChunks + 1; i++){
-			int start = i * maxSize;
-			int end = (i < numChunks) ? start + maxSize : start + remainder;
+			int start = i * payloadSize;
+			int end = (i < numChunks) ? start + payloadSize : start + remainder;
 			int nextSeqNum = i;
 			byte[] payload;
 			payload = Arrays.copyOfRange(fileContent, start, end);
@@ -77,15 +107,14 @@ public class FastFtp {
 	public void send(String serverName, int serverPort, String fileName) {
 		// to be completed
 		
-		Socket tcp;
-		DatagramSocket udp;
+		
 		try {
 			//Get the file so we can record it's length
 			Path path = Paths.get(System.getProperty("user.dir"), fileName);
 			File file = path.toFile(); 
 			
 			//Get address of the remote and local port
-			InetAddress ipAddress = InetAddress.getByName(serverName);
+		 	ipAddress = InetAddress.getByName(serverName);
 			tcp = new Socket(ipAddress, serverPort);	
 			udp = new DatagramSocket();
 			int localPort = udp.getLocalPort();
@@ -97,56 +126,117 @@ public class FastFtp {
 			os.writeLong(file.length());
 			os.writeInt(localPort);
 			os.flush();
-			int destinationPort = is.readInt();
+			destinationPort = is.readInt();
+			is.close();
+			os.close();
+
+			//break the file into segments
 			Queue<Segment> sendQ = segmentFile(fileName);
 
+			Thread ackReceiver = new Thread(new ReceivingACK(this, txQ, udp, sendQ.size() - 1));
+			ackReceiver.start();
+
+			while (!sendQ.isEmpty()){
+				boolean written = false;
+				while (isTxQFull(txQ)) {
+					if (!written) System.out.println("TxQ is Full, Waiting");
+					written = true;
+				}
+				Segment next = sendQ.remove();
+				processSend(next);
+			}
+			
+			ackReceiver.join();
+			tcp.close();
+			udp.close();
+			scheduler.shutdown();
 		} catch (FileNotFoundException e) {
 			System.err.println("File " + fileName + " not found. Exiting");
 		} catch (UnknownHostException e) {
 			System.err.println("Host " + serverName + " not found. Exiting");
 		} catch (IOException e){
-			System.err.println("Something went wrong. Exiting");
+			System.err.println("IOException");
 		} catch (InterruptedException e) {
-			
+			System.err.println("Interrupted Exception");
 		}
-			
+	}
 
-			
-		
-
-		
-
-
-		/**
-		 * 1. Open TCP to server,
-		 * 2. Open UDP Socket _u
-		 * 3. Complete Handshake
-		 * 	(a) writeUTF(): to send the name of the file to be transmitted
-		 * 	(b) writeLong(): to send the length (in bytes) of the file to be transmitted
-		 * 	(c) writeInt(): to send the local UDP port number used for file transfer
-		 *  (d) flush()
-		 *  (e) readInt(): to receive the server UDP port number used for file transfer
-		 * 4. Send the file segment by segment over UDP to _r
-		 * 5. Clean up and close TCP and UDP sockets
-		 */
+	//reading the queue state needs to be synched in this context
+	public synchronized boolean isTxQFull(TxQueue q){
+		return q.isFull();
 	}
 	public synchronized void processSend(Segment seg) {
-		// send seg to the UDP socket
-		// add seg to the transmission queue
-		// if this is the first segment in transmission queue, start the timer
-		
+		DatagramPacket pkt = new DatagramPacket(seg.getBytes(), seg.getBytes().length, ipAddress, destinationPort);
+		try {
+			// add seg to the transmission queue
+			// if this is the first segment in transmission queue, start the timer
+			System.out.println("SEND:" + seg.getSeqNum());
+			
+			if (txQ.isEmpty()) {
+				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.MILLISECONDS);
+			}
+			txQ.add(seg);
+			udp.send(pkt);
+			
+			int size = txQ.size();
+			
+			
+			
+		} catch (IOException e) {
+			System.err.println("Unable to send packet");
+		} catch (InterruptedException e){
+			System.err.println("Unable to add to queue");
+		}
 	}
 	public synchronized void processACK(Segment ack) {
-		// if ACK not in the current window, do nothing
-		// otherwise:
-		// cancel the timer
-		// remove all segements that are acked by this ACK from the transmission queue
-		// if there are any pending segments in transmission queue, start the timer
+		
+		try {
+
+			int size = txQ.size();
+			for ( int i = 0; i < size; i++){
+				Segment next = txQ.remove();
+				if (next.getSeqNum() >= ack.getSeqNum()){
+					txQ.add(next);
+				}
+			}
+
+			int sizeAfter = txQ.size();
+
+			if (size != sizeAfter) { //Then ACK must have been in current window, already removed above
+				schedFut.cancel(false);
+				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.MILLISECONDS);
+			}
+			
+			// if ACK not in the current window, do nothing
+			// otherwise:
+			// TODO: TIMER CANCEL
+			// remove all segements that are acked by this ACK from the transmission queue
+			// TODO: if there are any pending segments in transmission queue, TIMER START
+
+			
+			
+		} catch (Exception e) {
+			//TODO: handle exception
+		}
+		
 	}
 	public synchronized void processTimeout() {
-		// get the list of all pending segments from the transmission queue
-		// go through the list and send all segments to the UDP socket
-		// if there are any pending segments in transmission queue, start the timer
+		System.out.println("TIMEOUT");
+		try {
+			// get the list of all pending segments from the transmission queue
+			// go through the list and send all segments to the UDP socket
+			int size = txQ.size();
+			for (int i = 0; i < size; i++){
+				Segment next = txQ.remove();
+				DatagramPacket pkt = new DatagramPacket(next.getBytes(), next.getBytes().length, ipAddress, destinationPort);
+				udp.send(pkt);
+				txQ.add(next);
+			}
+			// schedFut = scheduler.schedule(timeOutHandler, timeout, TimeUnit.MILLISECONDS);
+			// if there are any pending segments in transmission queue, TIMER START. lets just leave it running shall we?
+		} catch (Exception e) {
+			
+		}
 	}
 	
 	
