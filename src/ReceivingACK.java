@@ -7,13 +7,11 @@ import cpsc441.a3.shared.*;
  * ReceivingACK
  */
 public class ReceivingACK implements Runnable {
-    private TxQueue txQ;
     private DatagramSocket udp;
     private FastFtp main;
     private int last;
 
-    public ReceivingACK(FastFtp main, TxQueue queue, DatagramSocket sock, int lastSeq) {
-        txQ = queue;
+    public ReceivingACK(FastFtp main, DatagramSocket sock, int lastSeq) {
         udp = sock;
         this.main = main;
         last = lastSeq;

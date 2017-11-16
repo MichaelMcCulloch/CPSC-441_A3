@@ -122,7 +122,7 @@ public class FastFtp {
 			//break the file into segments
 			Queue<Segment> sendQ = segmentFile(fileName);
 
-			Thread ackReceiver = new Thread(new ReceivingACK(this, txQ, udp, sendQ.size() - 1));
+			Thread ackReceiver = new Thread(new ReceivingACK(this, udp, sendQ.size() - 1));
 			ackReceiver.start();
 
 			while (!sendQ.isEmpty()) {
@@ -161,12 +161,10 @@ public class FastFtp {
 			System.out.println("SEND:" + seg.getSeqNum());
 
 			if (txQ.isEmpty()) {
-				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.MILLISECONDS);
+				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.SECONDS);
 			}
 			txQ.add(seg);
 			udp.send(pkt);
-
-			int size = txQ.size();
 
 		} catch (IOException e) {
 			System.err.println("Unable to send packet");
@@ -194,7 +192,7 @@ public class FastFtp {
 			}
 			if (sizeAfter != 0) {
 				schedFut.cancel(false);
-				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.MILLISECONDS);
+				schedFut = scheduler.scheduleWithFixedDelay(timeOutHandler, timeout, timeout, TimeUnit.SECONDS);
 			}
 		} catch (Exception e) {
 			//TODO: handle exception
@@ -216,7 +214,7 @@ public class FastFtp {
 				txQ.add(next);
 			}
 
-			// schedFut = scheduler.schedule(timeOutHandler, timeout, TimeUnit.MILLISECONDS);
+			// schedFut = scheduler.schedule(timeOutHandler, timeout, TimeUnit.SECONDS);
 			// if there are any pending segments in transmission queue, TIMER START. lets just leave it running shall we?
 		} catch (Exception e) {
 
